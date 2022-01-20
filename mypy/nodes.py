@@ -1107,7 +1107,7 @@ class AssignmentStmt(Statement):
     """
 
     __slots__ = ('lvalues', 'rvalue', 'type', 'unanalyzed_type', 'new_syntax',
-                 'is_alias_def', 'is_final_def')
+                 'is_alias_def', 'type_alias', 'is_final_def')
 
     lvalues: List[Lvalue]
     # This is a TempNode if and only if no rvalue (x: t).
@@ -1120,6 +1120,7 @@ class AssignmentStmt(Statement):
     new_syntax: bool
     # Does this assignment define a type alias?
     is_alias_def: bool
+    type_alias: Optional["TypeAlias"]
     # Is this a final definition?
     # Final attributes can't be re-assigned once set, and can't be overridden
     # in a subclass. This flag is not set if an attempted declaration was found to
@@ -1137,6 +1138,7 @@ class AssignmentStmt(Statement):
         self.unanalyzed_type = type
         self.new_syntax = new_syntax
         self.is_alias_def = False
+        self.type_alias = None
         self.is_final_def = False
 
     def accept(self, visitor: StatementVisitor[T]) -> T:
@@ -2997,14 +2999,15 @@ class TypeAlias(SymbolNode):
         within functions that can't be looked up from the symbol table)
     """
     __slots__ = ('target', '_fullname', 'alias_tvars', 'no_args', 'normalized',
-                 'line', 'column', '_is_recursive', 'eager')
+                 'line', 'column', '_is_recursive', 'eager', 'rtype')
 
     def __init__(self, target: 'mypy.types.Type', fullname: str, line: int, column: int,
                  *,
                  alias_tvars: Optional[List[str]] = None,
                  no_args: bool = False,
                  normalized: bool = False,
-                 eager: bool = False) -> None:
+                 eager: bool = False,
+                 rtype: 'Optional[mypy.types.Type]' = None) -> None:
         self._fullname = fullname
         self.target = target
         if alias_tvars is None:
@@ -3016,6 +3019,7 @@ class TypeAlias(SymbolNode):
         # it is the cached value.
         self._is_recursive: Optional[bool] = None
         self.eager = eager
+        self.rtype = rtype
         super().__init__(line, column)
 
     @property
@@ -3036,6 +3040,7 @@ class TypeAlias(SymbolNode):
             "normalized": self.normalized,
             "line": self.line,
             "column": self.column,
+            "rtype": self.rtype.serialize() if self.rtype is not None else None
         }
         return data
 
@@ -3052,8 +3057,9 @@ class TypeAlias(SymbolNode):
         normalized = data['normalized']
         line = data['line']
         column = data['column']
+        rtype = mypy.types.deserialize_type(data['rtype']) if data['rtype'] is not None else None
         return cls(target, fullname, line, column, alias_tvars=alias_tvars,
-                   no_args=no_args, normalized=normalized)
+                   no_args=no_args, normalized=normalized, rtype=rtype)
 
 
 class PlaceholderNode(SymbolNode):

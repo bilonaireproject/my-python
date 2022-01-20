@@ -2741,6 +2741,7 @@ class SemanticAnalyzer(NodeVisitor[None],
                                alias_tvars=alias_tvars,
                                no_args=no_args,
                                eager=eager)
+        s.type_alias = alias_node
         if isinstance(s.rvalue, (IndexExpr, CallExpr)):  # CallExpr is for `void = type(None)`
             s.rvalue.analyzed = TypeAliasExpr(alias_node)
             s.rvalue.analyzed.line = s.line
