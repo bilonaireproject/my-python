@@ -109,6 +109,8 @@ class NodeFixer(NodeVisitor[None]):
             item.accept(self)
         if o.impl:
             o.impl.accept(self)
+        if o.property_setter:
+            o.property_setter.accept(self)
 
     def visit_decorator(self, d: Decorator) -> None:
         if self.current_info is not None:
