@@ -163,7 +163,8 @@ toml_config_types.update({
 })
 
 
-def parse_config_file(options: Options, set_strict_flags: Callable[[], None],
+def parse_config_file(options: Options,
+                      strict_flag_assignments: Sequence[Tuple[str, object]],
                       filename: Optional[str],
                       stdout: Optional[TextIO] = None,
                       stderr: Optional[TextIO] = None) -> None:
@@ -215,6 +216,9 @@ def parse_config_file(options: Options, set_strict_flags: Callable[[], None],
     os.environ['MYPY_CONFIG_FILE_DIR'] = os.path.dirname(
             os.path.abspath(config_file))
 
+    def set_strict_flags(updates: Dict[str, object]) -> None:
+        updates.update(strict_flag_assignments)
+
     if 'mypy' not in parser:
         if filename or file_read not in defaults.SHARED_CONFIG_FILES:
             print(f"{file_read}: No [mypy] section in config file", file=stderr)
@@ -227,11 +231,16 @@ def parse_config_file(options: Options, set_strict_flags: Callable[[], None],
             setattr(options, k, v)
         options.report_dirs.update(report_dirs)
 
+    def set_strict_flags_section(updates: Dict[str, object]) -> None:
+        for dest, value in strict_flag_assignments:
+            if dest in PER_MODULE_OPTIONS:
+                updates[dest] = value
+
     for name, section in parser.items():
         if name.startswith('mypy-'):
             prefix = get_prefix(file_read, name)
             updates, report_dirs = parse_section(
-                prefix, options, set_strict_flags, section, config_types, stderr)
+                prefix, options, set_strict_flags_section, section, config_types, stderr)
             if report_dirs:
                 print("%sPer-module sections should not specify reports (%s)" %
                       (prefix, ', '.join(s + '_report' for s in sorted(report_dirs))),
@@ -346,7 +355,7 @@ def destructure_overrides(toml_data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def parse_section(prefix: str, template: Options,
-                  set_strict_flags: Callable[[], None],
+                  set_strict_flags: Callable[[Dict[str, object]], None],
                   section: Mapping[str, Any],
                   config_types: Dict[str, Any],
                   stderr: TextIO = sys.stderr
@@ -426,7 +435,7 @@ def parse_section(prefix: str, template: Options,
             continue
         if key == 'strict':
             if v:
-                set_strict_flags()
+                set_strict_flags(results)
             continue
         if key == 'silent_imports':
             print("%ssilent_imports has been replaced by "
@@ -533,7 +542,7 @@ def parse_mypy_comments(
         stderr = StringIO()
         strict_found = False
 
-        def set_strict_flags() -> None:
+        def set_strict_flags(ignored: Any) -> None:
             nonlocal strict_found
             strict_found = True
 
