@@ -4,7 +4,7 @@ from mypy.backports import OrderedDict
 from contextlib import contextmanager
 import itertools
 from typing import (
-    cast, Dict, Set, List, Tuple, Callable, Union, Optional, Sequence, Iterator
+    cast, Dict, Set, List, Tuple, Callable, Union, Optional, Sequence, Iterator, Iterable
 )
 from typing_extensions import ClassVar, Final, overload, TypeAlias as _TypeAlias
 
@@ -70,7 +70,7 @@ from mypy.typeops import (
     try_expanding_sum_type_to_union, tuple_fallback, make_simplified_union,
     true_only, false_only, erase_to_union_or_bound, function_type,
     callable_type, try_getting_str_literals, custom_special_method,
-    is_literal_type_like, simple_literal_type,
+    is_literal_type_like, simple_literal_type, try_getting_str_literals_from_type
 )
 from mypy.message_registry import ErrorMessage
 import mypy.errorcodes as codes
@@ -1491,6 +1491,27 @@ class ExpressionChecker(ExpressionVisitor[Type]):
                                                                         context)
                             is_unexpected_arg_error = True
                         ok = False
+                elif (isinstance(actual_type, Instance) and
+                        actual_type.type.has_base('typing.Mapping')):
+                    any_type = AnyType(TypeOfAny.special_form)
+                    mapping_info = self.chk.named_generic_type('typing.Mapping',
+                                                               [any_type, any_type]).type
+                    supertype = map_instance_to_supertype(actual_type, mapping_info)
+                    if messages and supertype.args:
+                        args = try_getting_str_literals_from_type(supertype.args[0])
+                        if args and nodes.ARG_STAR2 not in callee.arg_kinds:
+                            messages.unexpected_keyword_argument(
+                                callee, args[0], supertype.args[0], context)
+                            is_unexpected_arg_error = True
+                        elif (args and nodes.ARG_POS in callee.arg_kinds and
+                                not all(arg in callee.arg_names for arg in args) and
+                                isinstance(actual_names, Iterable)):
+                            act_names = [name for name, kind in
+                                         zip(iter(actual_names), actual_kinds)
+                                         if kind != nodes.ARG_STAR2]
+                            messages.too_few_arguments(callee, context, act_names)
+                        ok = False
+
                 # *args/**kwargs can be applied even if the function takes a fixed
                 # number of positional arguments. This may succeed at runtime.
 
@@ -4034,12 +4055,22 @@ class ExpressionChecker(ExpressionVisitor[Type]):
 
     def is_valid_keyword_var_arg(self, typ: Type) -> bool:
         """Is a type valid as a **kwargs argument?"""
+        mapping_type = self.chk.named_generic_type(
+            'typing.Mapping', [self.named_type('builtins.str'), AnyType(TypeOfAny.special_form)])
+        typ = get_proper_type(typ)
+
         ret = (
-                is_subtype(typ, self.chk.named_generic_type('typing.Mapping',
-                    [self.named_type('builtins.str'), AnyType(TypeOfAny.special_form)])) or
-                is_subtype(typ, self.chk.named_generic_type('typing.Mapping',
-                    [UninhabitedType(), UninhabitedType()])) or
-                isinstance(typ, ParamSpecType)
+            is_subtype(typ, mapping_type) or
+            (isinstance(typ, Instance) and
+                is_subtype(typ, self.chk.named_type('typing.Mapping')) and
+                try_getting_str_literals_from_type(map_instance_to_supertype(
+                    typ, mapping_type.type).args[0]) is not None) or
+            # This condition is to avoid false-positive errors when empty dictionaries are
+            # passed with double-stars (e.g., **{})。The type of empty dicts is inferred to be
+            # dict[<nothing>, <nothing>], which is not a subtype of Mapping[str, Any]。
+            is_subtype(typ, self.chk.named_generic_type('typing.Mapping',
+                                                        [UninhabitedType(), UninhabitedType()])) or
+            isinstance(typ, ParamSpecType)
         )
         if self.chk.options.python_version[0] < 3:
             ret = ret or is_subtype(typ, self.chk.named_generic_type('typing.Mapping',
