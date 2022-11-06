@@ -133,6 +133,8 @@ ASSERT_TYPE_NAMES: Final = ("typing.assert_type", "typing_extensions.assert_type
 
 OVERLOAD_NAMES: Final = ("typing.overload", "typing_extensions.overload")
 
+LITERAL_STRING_NAMES: Final = ("typing.LiteralString", "typing_extensions.LiteralString")
+
 # Attributes that can optionally be defined in the body of a subclass of
 # enum.Enum but are removed from the class __dict__ by EnumMeta.
 ENUM_REMOVED_PROPS: Final = ("_ignore_", "_order_", "__order__")
@@ -1196,6 +1198,15 @@ class ExtraAttrs:
         return f"ExtraAttrs({self.attrs!r}, {self.immutable!r}, {self.mod_name!r})"
 
 
+class TypeOfLiteralString:
+    """Used to specify what kind of `LiteralString` are we dealing with."""
+
+    __slots__ = ()
+
+    explicit: Final = 1
+    implicit: Final = 2
+
+
 class Instance(ProperType):
     """An instance type of form C[T1, ..., Tn].
 
@@ -1206,7 +1217,16 @@ class Instance(ProperType):
     fallbacks for all "non-special" (like UninhabitedType, ErasedType etc) types.
     """
 
-    __slots__ = ("type", "args", "invalid", "type_ref", "last_known_value", "_hash", "extra_attrs")
+    __slots__ = (
+        "type",
+        "args",
+        "invalid",
+        "type_ref",
+        "last_known_value",
+        "_hash",
+        "extra_attrs",
+        "literal_string",
+    )
 
     def __init__(
         self,
@@ -1217,6 +1237,7 @@ class Instance(ProperType):
         *,
         last_known_value: LiteralType | None = None,
         extra_attrs: ExtraAttrs | None = None,
+        literal_string: int | None = None,
     ) -> None:
         super().__init__(line, column)
         self.type = typ
@@ -1279,6 +1300,11 @@ class Instance(ProperType):
         # to be "short-lived", we don't serialize it, and even don't store as variable type.
         self.extra_attrs = extra_attrs
 
+        # Is set to `1` when explicit `LiteralString` type is used.
+        # Is set to `2` when implicit `LiteralString` is used, like `'a'`
+        # Is `None` by default.
+        self.literal_string = literal_string
+
     def accept(self, visitor: TypeVisitor[T]) -> T:
         return visitor.visit_instance(self)
 
@@ -1295,6 +1321,7 @@ class Instance(ProperType):
             and self.args == other.args
             and self.last_known_value == other.last_known_value
             and self.extra_attrs == other.extra_attrs
+            and self.literal_string == self.literal_string
         )
 
     def serialize(self) -> JsonDict | str:
@@ -1307,6 +1334,7 @@ class Instance(ProperType):
         data["args"] = [arg.serialize() for arg in self.args]
         if self.last_known_value is not None:
             data["last_known_value"] = self.last_known_value.serialize()
+        data["literal_string"] = self.literal_string
         return data
 
     @classmethod
@@ -1325,6 +1353,7 @@ class Instance(ProperType):
         inst.type_ref = data["type_ref"]  # Will be fixed up by fixup.py later.
         if "last_known_value" in data:
             inst.last_known_value = LiteralType.deserialize(data["last_known_value"])
+        inst.literal_string = data["literal_string"]
         return inst
 
     def copy_modified(
@@ -1332,15 +1361,19 @@ class Instance(ProperType):
         *,
         args: Bogus[list[Type]] = _dummy,
         last_known_value: Bogus[LiteralType | None] = _dummy,
+        literal_string: Bogus[int | None] = _dummy,
     ) -> Instance:
         new = Instance(
             self.type,
             args if args is not _dummy else self.args,
             self.line,
             self.column,
-            last_known_value=last_known_value
-            if last_known_value is not _dummy
-            else self.last_known_value,
+            last_known_value=(
+                last_known_value if last_known_value is not _dummy else self.last_known_value
+            ),
+            literal_string=(
+                literal_string if literal_string is not _dummy else self.literal_string
+            ),
         )
         # We intentionally don't copy the extra_attrs here, so they will be erased.
         new.can_be_true = self.can_be_true
@@ -2903,6 +2936,9 @@ class TypeStrVisitor(SyntheticTypeVisitor[str]):
             s = f"{t.last_known_value}?"
         else:
             s = t.type.fullname or t.type.name or "<???>"
+
+        if t.literal_string == TypeOfLiteralString.explicit:
+            s = "LiteralString"
 
         if t.args:
             if t.type.fullname == "builtins.tuple":

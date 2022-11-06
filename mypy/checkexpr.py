@@ -144,6 +144,7 @@ from mypy.types import (
     TypeAliasType,
     TypedDictType,
     TypeOfAny,
+    TypeOfLiteralString,
     TypeType,
     TypeVarTupleType,
     TypeVarType,
@@ -2730,7 +2731,8 @@ class ExpressionChecker(ExpressionVisitor[Type]):
             return typ.copy_modified(
                 last_known_value=LiteralType(
                     value=value, fallback=typ, line=typ.line, column=typ.column
-                )
+                ),
+                literal_string=TypeOfLiteralString.implicit,
             )
 
     def concat_tuples(self, left: TupleType, right: TupleType) -> TupleType:

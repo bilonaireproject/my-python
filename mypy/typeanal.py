@@ -45,6 +45,7 @@ from mypy.tvar_scope import TypeVarLikeScope
 from mypy.types import (
     ANNOTATED_TYPE_NAMES,
     FINAL_TYPE_NAMES,
+    LITERAL_STRING_NAMES,
     LITERAL_TYPE_NAMES,
     NEVER_NAMES,
     TYPE_ALIAS_NAMES,
@@ -74,6 +75,7 @@ from mypy.types import (
     TypedDictType,
     TypeList,
     TypeOfAny,
+    TypeOfLiteralString,
     TypeQuery,
     TypeType,
     TypeVarLikeType,
@@ -575,6 +577,10 @@ class TypeAnalyser(SyntheticTypeVisitor[Type], TypeAnalyzerPluginInterface):
                 self.fail("Unpack[...] requires exactly one type argument", t)
                 return AnyType(TypeOfAny.from_error)
             return UnpackType(self.anal_type(t.args[0]), line=t.line, column=t.column)
+        elif fullname in LITERAL_STRING_NAMES:
+            inst = self.named_type("builtins.str")
+            inst.literal_string = TypeOfLiteralString.explicit
+            return inst
         return None
 
     def get_omitted_any(self, typ: Type, fullname: str | None = None) -> AnyType:
@@ -1622,7 +1628,10 @@ def expand_type_alias(
             assert isinstance(node.target, Instance)  # type: ignore[misc]
             # Note: this is the only case where we use an eager expansion. See more info about
             # no_args aliases like L = List in the docstring for TypeAlias class.
-            return Instance(node.target.type, [], line=ctx.line, column=ctx.column)
+            inst = node.target.copy_modified(args=[])
+            inst.line = ctx.line
+            inst.column = ctx.column
+            return inst
         return TypeAliasType(node, [], line=ctx.line, column=ctx.column)
     if (
         exp_len == 0

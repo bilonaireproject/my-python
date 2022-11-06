@@ -49,6 +49,7 @@ from mypy.types import (
     TypeAliasType,
     TypedDictType,
     TypeOfAny,
+    TypeOfLiteralString,
     TypeType,
     TypeVarTupleType,
     TypeVarType,
@@ -463,7 +464,20 @@ class SubtypeVisitor(TypeVisitor[bool]):
                 # and we can't have circular promotions.
                 if left.type.alt_promote is right.type:
                     return True
+
             rname = right.type.fullname
+
+            # Check `LiteralString` special case:
+            if (
+                rname == "builtins.str"
+                and right.literal_string == TypeOfLiteralString.explicit
+                and left.type.fullname == rname
+            ):
+                return left.literal_string is not None or (
+                    left.last_known_value is not None
+                    and isinstance(left.last_known_value.value, str)
+                )
+
             # Always try a nominal check if possible,
             # there might be errors that a user wants to silence *once*.
             # NamedTuples are a special case, because `NamedTuple` is not listed
@@ -797,6 +811,13 @@ class SubtypeVisitor(TypeVisitor[bool]):
     def visit_literal_type(self, left: LiteralType) -> bool:
         if isinstance(self.right, LiteralType):
             return left == self.right
+        elif (
+            isinstance(left.value, str)
+            and isinstance(self.right, Instance)
+            and self.right.type.fullname == "builtins.str"
+            and self.right.literal_string is not None
+        ):
+            return True
         else:
             return self._is_subtype(left.fallback, self.right)
 
