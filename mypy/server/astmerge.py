@@ -213,8 +213,8 @@ class NodeReplaceVisitor(TraverserVisitor):
         super().visit_mypy_file(node)
 
     def visit_block(self, node: Block) -> None:
-        node.body = self.replace_statements(node.body)
         super().visit_block(node)
+        node.body = self.replace_statements(node.body)
 
     def visit_func_def(self, node: FuncDef) -> None:
         node = self.fixup(node)

@@ -512,8 +512,7 @@ class Server:
 
             print_memory_profile(run_gc=False)
 
-        __, n_notes, __ = count_stats(messages)
-        status = 1 if messages and n_notes < len(messages) else 0
+        status = 1 if messages else 0
         messages = self.pretty_messages(messages, len(sources), is_tty, terminal_width)
         return {"out": "".join(s + "\n" for s in messages), "err": "", "status": status}
 

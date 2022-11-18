@@ -39,7 +39,7 @@ from mypy.constraints import SUPERTYPE_OF
 from mypy.erasetype import erase_type, erase_typevars, remove_instance_last_known_values
 from mypy.errorcodes import TYPE_VAR, UNUSED_AWAITABLE, UNUSED_COROUTINE, ErrorCode
 from mypy.errors import Errors, ErrorWatcher, report_internal_error
-from mypy.expandtype import expand_self_type, expand_type, expand_type_by_instance
+from mypy.expandtype import expand_type, expand_type_by_instance
 from mypy.join import join_types
 from mypy.literals import Key, literal, literal_hash
 from mypy.maptype import map_instance_to_supertype
@@ -1178,17 +1178,12 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
                         if isinstance(arg_type, ParamSpecType):
                             pass
                         elif isinstance(arg_type, UnpackType):
-                            if isinstance(get_proper_type(arg_type.type), TupleType):
-                                # Instead of using Tuple[Unpack[Tuple[...]]], just use
-                                # Tuple[...]
-                                arg_type = arg_type.type
-                            else:
-                                arg_type = TupleType(
-                                    [arg_type],
-                                    fallback=self.named_generic_type(
-                                        "builtins.tuple", [self.named_type("builtins.object")]
-                                    ),
-                                )
+                            arg_type = TupleType(
+                                [arg_type],
+                                fallback=self.named_generic_type(
+                                    "builtins.tuple", [self.named_type("builtins.object")]
+                                ),
+                            )
                         else:
                             # builtins.tuple[T] is typing.Tuple[T, ...]
                             arg_type = self.named_generic_type("builtins.tuple", [arg_type])
@@ -2493,10 +2488,6 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
                 second_sig = self.bind_and_map_method(second, second_type, ctx, base2)
                 ok = is_subtype(first_sig, second_sig, ignore_pos_arg_names=True)
         elif first_type and second_type:
-            if isinstance(first.node, Var):
-                first_type = expand_self_type(first.node, first_type, fill_typevars(ctx))
-            if isinstance(second.node, Var):
-                second_type = expand_self_type(second.node, second_type, fill_typevars(ctx))
             ok = is_equivalent(first_type, second_type)
             if not ok:
                 second_node = base2[name].node
@@ -3077,8 +3068,6 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
         if base_var:
             base_node = base_var.node
             base_type = base_var.type
-            if isinstance(base_node, Var) and base_type is not None:
-                base_type = expand_self_type(base_node, base_type, fill_typevars(expr_node.info))
             if isinstance(base_node, Decorator):
                 base_node = base_node.func
                 base_type = base_node.type

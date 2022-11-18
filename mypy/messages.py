@@ -231,8 +231,8 @@ class MessageBuilder:
         else:
             origin_span = None
         self.errors.report(
-            context.line if context else -1,
-            context.column if context else -1,
+            context.get_line() if context else -1,
+            context.get_column() if context else -1,
             msg,
             severity=severity,
             file=file,
@@ -1899,7 +1899,7 @@ class MessageBuilder:
         missing = get_missing_protocol_members(subtype, supertype, skip=skip)
         if (
             missing
-            and (len(missing) < len(supertype.type.protocol_members) or missing == ["__call__"])
+            and len(missing) < len(supertype.type.protocol_members)
             and len(missing) <= MAX_ITEMS
         ):
             if missing == ["__call__"] and class_obj:
@@ -2663,7 +2663,6 @@ def get_bad_protocol_flags(
         if (
             IS_CLASSVAR in subflags
             and IS_CLASSVAR not in superflags
-            and IS_SETTABLE in superflags
             or IS_CLASSVAR in superflags
             and IS_CLASSVAR not in subflags
             or IS_SETTABLE in superflags

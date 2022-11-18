@@ -71,6 +71,14 @@ class Context:
         if end_column is not None:
             self.end_column = end_column
 
+    def get_line(self) -> int:
+        """Don't use. Use x.line."""
+        return self.line
+
+    def get_column(self) -> int:
+        """Don't use. Use x.column."""
+        return self.column
+
 
 if TYPE_CHECKING:
     # break import cycle only needed for mypy
@@ -480,6 +488,43 @@ class ImportAll(ImportBase):
 
     def accept(self, visitor: StatementVisitor[T]) -> T:
         return visitor.visit_import_all(self)
+
+
+class ImportedName(SymbolNode):
+    """Indirect reference to a fullname stored in symbol table.
+
+    This node is not present in the original program as such. This is
+    just a temporary artifact in binding imported names. After semantic
+    analysis pass 2, these references should be replaced with direct
+    reference to a real AST node.
+
+    Note that this is neither a Statement nor an Expression so this
+    can't be visited.
+    """
+
+    __slots__ = ("target_fullname",)
+
+    def __init__(self, target_fullname: str) -> None:
+        super().__init__()
+        self.target_fullname = target_fullname
+
+    @property
+    def name(self) -> str:
+        return self.target_fullname.split(".")[-1]
+
+    @property
+    def fullname(self) -> str:
+        return self.target_fullname
+
+    def serialize(self) -> JsonDict:
+        assert False, "ImportedName leaked from semantic analysis"
+
+    @classmethod
+    def deserialize(cls, data: JsonDict) -> ImportedName:
+        assert False, "ImportedName should never be serialized"
+
+    def __str__(self) -> str:
+        return f"ImportedName({self.target_fullname})"
 
 
 FUNCBASE_FLAGS: Final = ["is_property", "is_class", "is_static", "is_final"]
@@ -2768,7 +2813,6 @@ class TypeInfo(SymbolNode):
         "has_type_var_tuple_type",
         "type_var_tuple_prefix",
         "type_var_tuple_suffix",
-        "self_type",
     )
 
     _fullname: Bogus[str]  # Fully qualified name
@@ -2909,9 +2953,6 @@ class TypeInfo(SymbolNode):
     # in case we are doing multiple semantic analysis passes.
     special_alias: TypeAlias | None
 
-    # Shared type variable for typing.Self in this class (if used, otherwise None).
-    self_type: mypy.types.TypeVarType | None
-
     FLAGS: Final = [
         "is_abstract",
         "is_enum",
@@ -2964,7 +3005,6 @@ class TypeInfo(SymbolNode):
         self.is_newtype = False
         self.is_intersection = False
         self.metadata = {}
-        self.self_type = None
 
     def add_type_vars(self) -> None:
         self.has_type_var_tuple_type = False
@@ -3182,7 +3222,6 @@ class TypeInfo(SymbolNode):
             "metadata": self.metadata,
             "slots": list(sorted(self.slots)) if self.slots is not None else None,
             "deletable_attributes": self.deletable_attributes,
-            "self_type": self.self_type.serialize() if self.self_type is not None else None,
         }
         return data
 
@@ -3239,8 +3278,6 @@ class TypeInfo(SymbolNode):
         ti.slots = set(data["slots"]) if data["slots"] is not None else None
         ti.deletable_attributes = data["deletable_attributes"]
         set_flags(ti, data["flags"])
-        st = data["self_type"]
-        ti.self_type = mypy.types.TypeVarType.deserialize(st) if st is not None else None
         return ti
 
 
