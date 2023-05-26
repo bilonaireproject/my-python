@@ -1234,7 +1234,7 @@ def report_internal_error(
     # Print "INTERNAL ERROR" message.
     print(
         f"{prefix}error: INTERNAL ERROR --",
-        "Please try using mypy master on GitHub:\n"
+        "Please try using mypy main on GitHub:\n"
         "https://mypy.readthedocs.io/en/stable/common_issues.html"
         "#using-a-development-mypy-build",
         file=stderr,
@@ -1243,7 +1243,7 @@ def report_internal_error(
         print("Please report a bug at https://github.com/python/mypy/issues", file=stderr)
     else:
         print(
-            "If this issue continues with mypy master, "
+            "If this issue continues with mypy main, "
             "please report a bug at https://github.com/python/mypy/issues",
             file=stderr,
         )
