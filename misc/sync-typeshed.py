@@ -89,12 +89,7 @@ def create_or_update_pull_request(*, title: str, body: str, branch_name: str) ->
 
     with requests.post(
         "https://api.github.com/repos/python/mypy/pulls",
-        json={
-            "title": title,
-            "body": body,
-            "head": f"{fork_owner}:{branch_name}",
-            "base": "master",
-        },
+        json={"title": title, "body": body, "head": f"{fork_owner}:{branch_name}", "base": "main"},
         headers=get_github_api_headers(),
     ) as response:
         resp_json = response.json()
@@ -105,7 +100,7 @@ def create_or_update_pull_request(*, title: str, body: str, branch_name: str) ->
             # Find the existing PR
             with requests.get(
                 "https://api.github.com/repos/python/mypy/pulls",
-                params={"state": "open", "head": f"{fork_owner}:{branch_name}", "base": "master"},
+                params={"state": "open", "head": f"{fork_owner}:{branch_name}", "base": "main"},
                 headers=get_github_api_headers(),
             ) as response:
                 response.raise_for_status()
@@ -149,7 +144,7 @@ def main() -> None:
             raise ValueError("GITHUB_TOKEN environment variable must be set")
 
     branch_name = "mypybot/sync-typeshed"
-    subprocess.run(["git", "checkout", "-B", branch_name, "origin/master"], check=True)
+    subprocess.run(["git", "checkout", "-B", branch_name, "origin/main"], check=True)
 
     if not args.typeshed_dir:
         # Clone typeshed repo if no directory given.
