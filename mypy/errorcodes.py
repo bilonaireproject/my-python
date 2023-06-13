@@ -229,6 +229,11 @@ UNUSED_IGNORE: Final = ErrorCode(
 )
 
 
+NO_INCOMPLETE_DEF: Final[ErrorCode] = ErrorCode(
+    "no-incomplete-def", "Function is missing a return type annotation", "General"
+)
+
+
 # Syntax errors are often blocking.
 SYNTAX: Final[ErrorCode] = ErrorCode("syntax", "Report syntax errors", "General")
 
