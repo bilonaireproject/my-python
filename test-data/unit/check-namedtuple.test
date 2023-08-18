@@ -254,7 +254,6 @@ class B(A):
 [builtins fixtures/tuple.pyi]
 
 
-[out]
 
 [case testNamedTupleTypeReferenceToClassDerivedFrom]
 from typing import NamedTuple
@@ -273,7 +272,6 @@ class B(A):
                               variable has type "int")
 [builtins fixtures/tuple.pyi]
 
-[out]
 
 [case testNamedTupleSubtyping]
 from typing import NamedTuple, Tuple
@@ -563,7 +561,6 @@ reveal_type(G[M]().x[0])  # N: Revealed type is "builtins.int"
 
 M = NamedTuple('M', [('x', int)])
 [builtins fixtures/tuple.pyi]
-[out]
 
 [case testNamedTupleWithImportCycle]
 import a
@@ -642,7 +639,6 @@ class B:
     def aWithTuple(self, atuple: 'a.ATuple') -> str:
         return 'a'
 [builtins fixtures/tuple.pyi]
-[out]
 
 [case testSelfRefNT1]
 # flags: --disable-recursive-aliases
@@ -746,7 +742,6 @@ def my_eval(exp: Exp) -> int:
 
 my_eval(A([B(1), B(2)])) # OK
 [builtins fixtures/isinstancelist.pyi]
-[out]
 
 [case testNamedTupleImportCycle]
 
@@ -768,7 +763,6 @@ from typing import NamedTuple
 
 tp = NamedTuple('tp', [('x', int)])
 [builtins fixtures/tuple.pyi]
-[out]
 
 [case testSubclassOfRecursiveNamedTuple]
 # flags: --disable-recursive-aliases
@@ -783,7 +777,6 @@ class HelpCommand(Command):
 hc = HelpCommand(subcommands=[])
 reveal_type(hc)  # N: Revealed type is "Tuple[builtins.list[Any], fallback=__main__.HelpCommand]"
 [builtins fixtures/list.pyi]
-[out]
 
 [case testUnsafeOverlappingNamedTuple]
 from typing import NamedTuple
@@ -844,7 +837,6 @@ def f(o: Base) -> None:
     if isinstance(o, MyTuple):
         reveal_type(o.value)  # N: Revealed type is "builtins.float"
 [builtins fixtures/isinstance.pyi]
-[out]
 
 [case testNamedTupleNew]
 from typing import NamedTuple

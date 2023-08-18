@@ -64,7 +64,9 @@ def parse_test_case(case: DataDrivenTestCase) -> None:
     else:
         join = posixpath.join
 
-    out_section_missing = case.suite.required_out_section
+    had_out_section = False
+    had_useful_out_sections = False
+    had_effective_out_section = False
 
     files: list[tuple[str, str]] = []  # path and contents
     output_files: list[tuple[str, str | Pattern[str]]] = []  # output path and contents
@@ -148,6 +150,9 @@ def parse_test_case(case: DataDrivenTestCase) -> None:
             full = join(base_path, m.group(1))
             deleted_paths.setdefault(num, set()).add(full)
         elif re.match(r"out[0-9]*$", item.id):
+            had_out_section = True
+            if item.data or item.id != "out":
+                had_useful_out_sections = True
             if item.arg is None:
                 args = []
             else:
@@ -190,15 +195,20 @@ def parse_test_case(case: DataDrivenTestCase) -> None:
                     passnum = int(item.id[len("out") :])
                     assert passnum > 1
                     output2[passnum] = tmp_output
-                out_section_missing = False
+                had_effective_out_section = True
         elif item.id == "triggered" and item.arg is None:
             triggered = item.data
         else:
             section_str = item.id + (f" {item.arg}" if item.arg else "")
             _item_fail(f"Invalid section header [{section_str}] in case {case.name!r}")
 
-    if out_section_missing:
-        _case_fail(f"Required output section not found in case {case.name!r}")
+    if case.suite.required_out_section:
+        if not had_effective_out_section:
+            _case_fail(f"Required output section not found in case {case.name!r}")
+    elif not case.suite.allow_redundant_out_section and (
+        had_out_section and not had_useful_out_sections
+    ):
+        _case_fail(f"Redundant [out] section(s) in {case.name!r}")
 
     for passnum in stale_modules.keys():
         if passnum not in rechecked_modules:
@@ -808,6 +818,7 @@ class DataSuite:
     data_prefix = test_data_prefix
 
     required_out_section = False
+    allow_redundant_out_section = False
 
     native_sep = False
 

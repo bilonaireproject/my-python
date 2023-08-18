@@ -19,7 +19,6 @@ class A(B):
         b = super().f()
     return a
 [builtins fixtures/tuple.pyi]
-[out]
 
 [case testAccessingSuperTypeMethodWithArgs]
 from typing import Any
@@ -34,7 +33,6 @@ class A(B):
     self.f(b)
     self.f(a)
 [builtins fixtures/tuple.pyi]
-[out]
 
 [case testAccessingSuperInit]
 # flags: --no-strict-optional
@@ -46,7 +44,6 @@ class A(B):
     super().__init__(B(None)) # E: Argument 1 to "__init__" of "B" has incompatible type "B"; expected "A"
     super().__init__()       # E: Missing positional argument "x" in call to "__init__" of "B"
     super().__init__(A())
-[out]
 
 [case testAccessingSuperMemberWithDeepHierarchy]
 import typing
@@ -57,7 +54,6 @@ class A(B):
   def f(self) -> None:
     super().g() # E: "g" undefined in superclass
     super().f()
-[out]
 
 [case testAssignToBaseClassMethod]
 import typing
@@ -82,7 +78,6 @@ class C(A, B):
         super().f(1) # E: Too many arguments for "f" of "A"
         super().g() # E: Missing positional argument "x" in call to "g" of "B"
         super().not_there() # E: "not_there" undefined in superclass
-[out]
 
 [case testSuperWithNew]
 class A:
@@ -100,7 +95,6 @@ B(1, 'x')
 [builtins fixtures/__new__.pyi]
 
 reveal_type(C.a)  # N: Revealed type is "Any"
-[out]
 
 [case testSuperWithUnknownBase]
 from typing import Any
@@ -108,7 +102,6 @@ B = None  # type: Any
 class C(B):
     def __init__(self, arg=0):
         super(C, self).__init__(arg, arg=arg)
-[out]
 
 [case testSuperSilentInDynamicFunction]
 class A:
@@ -117,7 +110,6 @@ class A:
 class B(A):
     def foo(self):
         super(B, self).foo() # Not an error
-[out]
 
 [case testSuperWithAny]
 class B:

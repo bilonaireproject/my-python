@@ -101,3 +101,20 @@ class ParseTestDataSuite(Suite):
 
         # Assert
         assert "version==3.7 always false since minimum runtime version is (3, 8)" in actual
+
+    def test_redundant_out(self) -> None:
+        # Arrange
+        data = self._dedent(
+            """
+            [case abc]
+            s: str = 42
+            [out]
+            [out version==3.7]
+            """
+        )
+
+        # Act
+        actual = self._run_pytest(data)
+
+        # Assert
+        assert "Redundant [out] section(s) in 'abc'" in actual

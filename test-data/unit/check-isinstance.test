@@ -1919,7 +1919,6 @@ if y not in x:
 else:
     reveal_type(y)  # N: Revealed type is "builtins.int"
 [builtins fixtures/list.pyi]
-[out]
 
 [case testNarrowTypeAfterInListOfOptional]
 from typing import List, Optional
@@ -1932,7 +1931,6 @@ if y not in x:
 else:
     reveal_type(y)  # N: Revealed type is "Union[builtins.int, None]"
 [builtins fixtures/list.pyi]
-[out]
 
 [case testNarrowTypeAfterInListNonOverlapping]
 from typing import List, Optional
@@ -1945,7 +1943,6 @@ if y in x:
 else:
     reveal_type(y)  # N: Revealed type is "Union[builtins.int, None]"
 [builtins fixtures/list.pyi]
-[out]
 
 [case testNarrowTypeAfterInListNested]
 from typing import List, Optional, Any
@@ -1959,7 +1956,6 @@ if lst in nested_any:
 if x in nested_any:
     reveal_type(x) # N: Revealed type is "Union[builtins.int, None]"
 [builtins fixtures/list.pyi]
-[out]
 
 [case testNarrowTypeAfterInTuple]
 from typing import Optional
@@ -1973,7 +1969,6 @@ if y in (B(), C()):
 else:
     reveal_type(y) # N: Revealed type is "Union[__main__.B, None]"
 [builtins fixtures/tuple.pyi]
-[out]
 
 [case testNarrowTypeAfterInNamedTuple]
 from typing import NamedTuple, Optional
@@ -1988,7 +1983,6 @@ if y not in nt:
 else:
     reveal_type(y) # N: Revealed type is "builtins.int"
 [builtins fixtures/tuple.pyi]
-[out]
 
 [case testNarrowTypeAfterInDict]
 from typing import Dict, Optional
@@ -2004,7 +1998,6 @@ if y not in x:
 else:
     reveal_type(y) # N: Revealed type is "builtins.str"
 [builtins fixtures/dict.pyi]
-[out]
 
 [case testNarrowTypeAfterInNoAnyOrObject]
 from typing import Any, List, Optional
@@ -2023,7 +2016,6 @@ else:
     reveal_type(y) # N: Revealed type is "Union[builtins.int, None]"
 [typing fixtures/typing-medium.pyi]
 [builtins fixtures/list.pyi]
-[out]
 
 [case testNarrowTypeAfterInUserDefined]
 from typing import Container, Optional
@@ -2044,7 +2036,6 @@ else:
     reveal_type(y) # N: Revealed type is "Union[builtins.int, None]"
 [typing fixtures/typing-full.pyi]
 [builtins fixtures/list.pyi]
-[out]
 
 [case testNarrowTypeAfterInSet]
 from typing import Optional, Set
@@ -2060,7 +2051,6 @@ if y not in s:
 else:
     reveal_type(y) # N: Revealed type is "builtins.str"
 [builtins fixtures/set.pyi]
-[out]
 
 [case testNarrowTypeAfterInTypedDict]
 from typing import Optional
@@ -2077,7 +2067,6 @@ def f() -> None:
     reveal_type(x) # N: Revealed type is "builtins.str"
 [typing fixtures/typing-typeddict.pyi]
 [builtins fixtures/dict.pyi]
-[out]
 
 [case testIsinstanceWidensWithAnyArg]
 from typing import Any
