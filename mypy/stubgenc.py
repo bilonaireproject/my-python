@@ -365,6 +365,7 @@ def generate_c_function_stub(
     if is_overloaded:
         imports.append("from typing import overload")
     if inferred:
+        docstr = getattr(obj, "__doc__", None)
         for signature in inferred:
             args: list[str] = []
             for arg in signature.args:
@@ -458,6 +459,7 @@ def generate_c_property_stub(
     module: ModuleType | None = None,
     known_modules: list[str] | None = None,
     imports: list[str] | None = None,
+    include_docstrings: bool = False,
 ) -> None:
     """Generate property stub using introspection of 'obj'.
 
@@ -476,25 +478,39 @@ def generate_c_property_stub(
         else:
             return None
 
-    inferred = infer_prop_type(getattr(obj, "__doc__", None))
+    docstr: str | None = getattr(obj, "__doc__", None)
+    inferred = infer_prop_type(docstr)
     if not inferred:
         fget = getattr(obj, "fget", None)
         inferred = infer_prop_type(getattr(fget, "__doc__", None))
+        docstr = getattr(fget, "__doc__", None) or docstr
     if not inferred:
         inferred = "Any"
 
     if module is not None and imports is not None and known_modules is not None:
         inferred = strip_or_import(inferred, module, known_modules, imports)
 
+    if include_docstrings and docstr:
+        # Quoted docstr
+        docstr = mypy.util.quote_docstring(docstr.strip())
+        # Indented docstr
+        docstr = "\n    ".join(docstr.split("\n"))
+
     if is_static_property(obj):
         trailing_comment = "  # read-only" if readonly else ""
         static_properties.append(f"{name}: ClassVar[{inferred}] = ...{trailing_comment}")
+        if include_docstrings and docstr:
+            static_properties.extend(docstr.split("\n"))
     else:  # regular property
         if readonly:
             ro_properties.append("@property")
             ro_properties.append(f"def {name}(self) -> {inferred}: ...")
+            if include_docstrings and docstr:
+                ro_properties.extend(f"    {docstr}".split("\n"))
         else:
             rw_properties.append(f"{name}: {inferred}")
+            if include_docstrings and docstr:
+                rw_properties.extend(docstr.split("\n"))
 
 
 def generate_c_type_stub(
@@ -561,6 +577,7 @@ def generate_c_type_stub(
                 module=module,
                 known_modules=known_modules,
                 imports=imports,
+                include_docstrings=include_docstrings,
             )
         elif is_c_type(value):
             generate_c_type_stub(
@@ -605,8 +622,19 @@ def generate_c_type_stub(
         )
     else:
         bases_str = ""
+
+    docstr: str | None = getattr(obj, "__doc__", None)
+    if include_docstrings and docstr:
+        # Quoted docstr
+        docstr = mypy.util.quote_docstring(docstr.strip())
+        # Indented docstr
+        docstr = "\n    ".join(docstr.split("\n"))
+        # Add the docstr class type
+
     if types or static_properties or rw_properties or methods or ro_properties:
         output.append(f"class {class_name}{bases_str}:")
+        if include_docstrings and docstr:
+            output.extend(f"    {docstr}".split("\n"))
         for line in types:
             if (
                 output
@@ -626,6 +654,8 @@ def generate_c_type_stub(
             output.append(f"    {line}")
     else:
         output.append(f"class {class_name}{bases_str}: ...")
+        if include_docstrings and docstr:
+            output.extend(f"    {docstr}".split("\n") + [""])
 
 
 def get_type_fullname(typ: type) -> str:
