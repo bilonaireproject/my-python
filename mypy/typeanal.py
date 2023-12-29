@@ -1776,7 +1776,7 @@ TypeVarLikeList = List[Tuple[str, TypeVarLikeExpr]]
 
 
 class MsgCallback(Protocol):
-    def __call__(self, __msg: str, __ctx: Context, *, code: ErrorCode | None = None) -> None:
+    def __call__(self, msg: str, ctx: Context, /, *, code: ErrorCode | None = None) -> None:
         ...
 
 
