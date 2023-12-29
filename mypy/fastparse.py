@@ -342,6 +342,51 @@ def is_no_type_check_decorator(expr: ast3.expr) -> bool:
     return False
 
 
+class NameMangler(ast3.NodeTransformer):
+    """Mangle all private identifiers within a class body (including nested classes)."""
+
+    _name_complete: str
+    _name_trimmed: str
+
+    def __init__(self, classname: str) -> None:
+        self._name_complete = classname
+        self._name_trimmed = classname.lstrip("_")
+
+    def _mangle(self, name: str) -> str:
+        """Mangle the given name if it looks like a private attribute."""
+        if name.startswith("__") and not name.endswith("__"):
+            return f"_{self._name_trimmed}{name}"
+        return name
+
+    def visit_Attribute(self, node: ast3.Attribute) -> ast3.Attribute:
+        node.attr = self._mangle(node.attr)
+        self.generic_visit(node)
+        return node
+
+    def visit_FunctionDef(self, node: ast3.FunctionDef) -> ast3.FunctionDef:
+        node.name = self._mangle(node.name)
+        self.generic_visit(node)
+        return node
+
+    def visit_AsyncFunctionDef(self, node: ast3.AsyncFunctionDef) -> ast3.AsyncFunctionDef:
+        node.name = self._mangle(node.name)
+        self.generic_visit(node)
+        return node
+
+    def visit_Name(self, node: Name) -> Name:
+        node.id = self._mangle(node.id)
+        self.generic_visit(node)
+        return node
+
+    def visit_ClassDef(self, node: ast3.ClassDef) -> ast3.ClassDef:
+        if self._name_complete == node.name:
+            self.generic_visit(node)
+        else:
+            NameMangler(node.name).visit(node)
+            node.name = self._mangle(node.name)
+        return node
+
+
 class ASTConverter:
     def __init__(
         self,
@@ -1131,6 +1176,8 @@ class ASTConverter:
                 n.type_params[0].col_offset,
                 blocker=False,
             )
+
+        NameMangler(n.name).visit(n)
 
         cdef = ClassDef(
             n.name,
