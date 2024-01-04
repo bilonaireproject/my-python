@@ -385,6 +385,8 @@ class NameMangler(ast3.NodeTransformer):
         else:
             mangler = NameMangler(self._name_complete, self._future_annotations)
         mangler.visit(node.args)
+        for dec in node.decorator_list:
+            mangler.visit(dec)
         if (node.returns is not None) and not self._future_annotations:
             mangler.visit(node.returns)
         for stmt in node.body:
@@ -411,6 +413,8 @@ class NameMangler(ast3.NodeTransformer):
                 self.visit(subnode)
             self._mangle_slots(node)
         else:
+            for subnode in node.decorator_list:
+                self.visit(subnode)
             NameMangler(node.name, self._future_annotations).visit(node)
             node.name = self._mangle(node.name)
         return node
