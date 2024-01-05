@@ -1249,7 +1249,7 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
                         if (
                             arg_type.variance == COVARIANT
                             and defn.name not in ("__init__", "__new__", "__post_init__")
-                            and not is_private(defn.name)  # private methods are not inherited
+                            and "mypy-" not in defn.name  # skip internally added methods
                         ):
                             ctx: Context = arg_type
                             if ctx.line < 0:
@@ -1881,7 +1881,6 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
             found_method_base_classes
             and not defn.is_explicit_override
             and defn.name not in ("__init__", "__new__")
-            and not is_private(defn.name)
         ):
             self.msg.explicit_override_decorator_missing(
                 defn.name, found_method_base_classes[0].fullname, context or defn
@@ -1924,7 +1923,7 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
             base_attr = base.names.get(name)
             if base_attr:
                 # First, check if we override a final (always an error, even with Any types).
-                if is_final_node(base_attr.node) and not is_private(name):
+                if is_final_node(base_attr.node):
                     self.msg.cant_override_final(name, base.name, defn)
                 # Second, final can't override anything writeable independently of types.
                 if defn.is_final:
@@ -2174,9 +2173,6 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
             elif isinstance(original, CallableType) and isinstance(override, CallableType):
                 if original.type_guard is not None and override.type_guard is None:
                     fail = True
-
-        if is_private(name):
-            fail = False
 
         if fail:
             emitted_msg = False
@@ -2575,8 +2571,6 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
             # Normal checks for attribute compatibility should catch any problems elsewhere.
             non_overridden_attrs = base.names.keys() - typ.names.keys()
             for name in non_overridden_attrs:
-                if is_private(name):
-                    continue
                 for base2 in mro[i + 1 :]:
                     # We only need to check compatibility of attributes from classes not
                     # in a subclass relationship. For subclasses, normal (single inheritance)
@@ -2684,7 +2678,7 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
             ok = True
         # Final attributes can never be overridden, but can override
         # non-final read-only attributes.
-        if is_final_node(second.node) and not is_private(name):
+        if is_final_node(second.node):
             self.msg.cant_override_final(name, base2.name, ctx)
         if is_final_node(first.node):
             self.check_if_final_var_override_writable(name, second.node, ctx)
@@ -3140,9 +3134,6 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
                 ):
                     continue
 
-                if is_private(lvalue_node.name):
-                    continue
-
                 base_type, base_node = self.lvalue_type_from_base(lvalue_node, base)
                 if isinstance(base_type, PartialType):
                     base_type = None
@@ -3311,8 +3302,6 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
         Other situations are checked in `check_final()`.
         """
         if not isinstance(base_node, (Var, FuncBase, Decorator)):
-            return True
-        if is_private(node.name):
             return True
         if base_node.is_final and (node.is_final or not isinstance(base_node, Var)):
             # Give this error only for explicit override attempt with `Final`, or
@@ -8257,15 +8246,6 @@ def is_overlapping_types_no_promote_no_uninhabited_no_none(left: Type, right: Ty
         ignore_uninhabited=True,
         prohibit_none_typevar_overlap=True,
     )
-
-
-def is_private(node_name: str) -> bool:
-    """Check if node is private to class definition.
-
-    Since Mypy supports name mangling, `is_private` is likely only required for
-    internally introduced names like `__mypy-replace` and `__mypy-post_init`.
-    """
-    return node_name.startswith("__") and not node_name.endswith("__")
 
 
 def is_string_literal(typ: Type) -> bool:
