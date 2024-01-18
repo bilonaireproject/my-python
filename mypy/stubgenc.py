@@ -728,7 +728,7 @@ class InspectionStubGenerator(BaseStubGenerator):
 
                 rw_properties.append(f"{self._indent}{name}: {inferred_type}")
 
-    def get_type_fullname(self, typ: type) -> str:
+    def get_type_fullname(self, typ: type[object]) -> str:
         """Given a type, return a string representation"""
         if typ is Any:
             return "Any"
@@ -739,7 +739,7 @@ class InspectionStubGenerator(BaseStubGenerator):
             typename = f"{module_name}.{typename}"
         return typename
 
-    def get_base_types(self, obj: type) -> list[str]:
+    def get_base_types(self, obj: type[object]) -> list[str]:
         all_bases = type.mro(obj)
         if all_bases[-1] is object:
             # TODO: Is this always object?
@@ -751,13 +751,13 @@ class InspectionStubGenerator(BaseStubGenerator):
         # remove the class itself
         all_bases = all_bases[1:]
         # Remove base classes of other bases as redundant.
-        bases: list[type] = []
+        bases: list[type[object]] = []
         for base in all_bases:
             if not any(issubclass(b, base) for b in bases):
                 bases.append(base)
         return [self.strip_or_import(self.get_type_fullname(base)) for base in bases]
 
-    def generate_class_stub(self, class_name: str, cls: type, output: list[str]) -> None:
+    def generate_class_stub(self, class_name: str, cls: type[object], output: list[str]) -> None:
         """Generate stub for a single class using runtime introspection.
 
         The result lines will be appended to 'output'. If necessary, any
