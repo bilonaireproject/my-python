@@ -85,6 +85,15 @@ if TYPE_CHECKING:
         TypeVisitor as TypeVisitor,
     )
 
+TYPE_VAR_LIKE_NAMES: Final = (
+    "typing.TypeVar",
+    "typing_extensions.TypeVar",
+    "typing.ParamSpec",
+    "typing_extensions.ParamSpec",
+    "typing.TypeVarTuple",
+    "typing_extensions.TypeVarTuple",
+)
+
 TYPED_NAMEDTUPLE_NAMES: Final = ("typing.NamedTuple", "typing_extensions.NamedTuple")
 
 # Supported names of TypedDict type constructors.
@@ -441,7 +450,7 @@ class TypeGuardedType(Type):
 
     __slots__ = ("type_guard",)
 
-    def __init__(self, type_guard: Type):
+    def __init__(self, type_guard: Type) -> None:
         super().__init__(line=type_guard.line, column=type_guard.column)
         self.type_guard = type_guard
 
@@ -1490,9 +1499,9 @@ class Instance(ProperType):
             args if args is not _dummy else self.args,
             self.line,
             self.column,
-            last_known_value=last_known_value
-            if last_known_value is not _dummy
-            else self.last_known_value,
+            last_known_value=(
+                last_known_value if last_known_value is not _dummy else self.last_known_value
+            ),
         )
         # We intentionally don't copy the extra_attrs here, so they will be erased.
         new.can_be_true = self.can_be_true
@@ -1515,7 +1524,7 @@ class Instance(ProperType):
         return (
             self.type.is_enum
             and len(self.get_enum_values()) == 1
-            or self.type.fullname == "builtins.ellipsis"
+            or self.type.fullname in {"builtins.ellipsis", "types.EllipsisType"}
         )
 
     def get_enum_values(self) -> list[str]:
@@ -1791,6 +1800,7 @@ class CallableType(FunctionLike):
         "def_extras",  # Information about original definition we want to serialize.
         # This is used for more detailed error messages.
         "type_guard",  # T, if -> TypeGuard[T] (ret_type is bool in this case).
+        "type_is",  # T, if -> TypeIs[T] (ret_type is bool in this case).
         "from_concatenate",  # whether this callable is from a concatenate object
         # (this is used for error messages)
         "imprecise_arg_kinds",
@@ -1817,6 +1827,7 @@ class CallableType(FunctionLike):
         bound_args: Sequence[Type | None] = (),
         def_extras: dict[str, Any] | None = None,
         type_guard: Type | None = None,
+        type_is: Type | None = None,
         from_concatenate: bool = False,
         imprecise_arg_kinds: bool = False,
         unpack_kwargs: bool = False,
@@ -1866,6 +1877,7 @@ class CallableType(FunctionLike):
         else:
             self.def_extras = {}
         self.type_guard = type_guard
+        self.type_is = type_is
         self.unpack_kwargs = unpack_kwargs
 
     def copy_modified(
@@ -1887,6 +1899,7 @@ class CallableType(FunctionLike):
         bound_args: Bogus[list[Type | None]] = _dummy,
         def_extras: Bogus[dict[str, Any]] = _dummy,
         type_guard: Bogus[Type | None] = _dummy,
+        type_is: Bogus[Type | None] = _dummy,
         from_concatenate: Bogus[bool] = _dummy,
         imprecise_arg_kinds: Bogus[bool] = _dummy,
         unpack_kwargs: Bogus[bool] = _dummy,
@@ -1911,6 +1924,7 @@ class CallableType(FunctionLike):
             bound_args=bound_args if bound_args is not _dummy else self.bound_args,
             def_extras=def_extras if def_extras is not _dummy else dict(self.def_extras),
             type_guard=type_guard if type_guard is not _dummy else self.type_guard,
+            type_is=type_is if type_is is not _dummy else self.type_is,
             from_concatenate=(
                 from_concatenate if from_concatenate is not _dummy else self.from_concatenate
             ),
@@ -2224,6 +2238,7 @@ class CallableType(FunctionLike):
             "bound_args": [(None if t is None else t.serialize()) for t in self.bound_args],
             "def_extras": dict(self.def_extras),
             "type_guard": self.type_guard.serialize() if self.type_guard is not None else None,
+            "type_is": (self.type_is.serialize() if self.type_is is not None else None),
             "from_concatenate": self.from_concatenate,
             "imprecise_arg_kinds": self.imprecise_arg_kinds,
             "unpack_kwargs": self.unpack_kwargs,
@@ -2248,6 +2263,7 @@ class CallableType(FunctionLike):
             type_guard=(
                 deserialize_type(data["type_guard"]) if data["type_guard"] is not None else None
             ),
+            type_is=(deserialize_type(data["type_is"]) if data["type_is"] is not None else None),
             from_concatenate=data["from_concatenate"],
             imprecise_arg_kinds=data["imprecise_arg_kinds"],
             unpack_kwargs=data["unpack_kwargs"],
@@ -2834,13 +2850,13 @@ class UnionType(ProperType):
 
     @overload
     @staticmethod
-    def make_union(items: Sequence[ProperType], line: int = -1, column: int = -1) -> ProperType:
-        ...
+    def make_union(
+        items: Sequence[ProperType], line: int = -1, column: int = -1
+    ) -> ProperType: ...
 
     @overload
     @staticmethod
-    def make_union(items: Sequence[Type], line: int = -1, column: int = -1) -> Type:
-        ...
+    def make_union(items: Sequence[Type], line: int = -1, column: int = -1) -> Type: ...
 
     @staticmethod
     def make_union(items: Sequence[Type], line: int = -1, column: int = -1) -> Type:
@@ -3052,13 +3068,11 @@ class PlaceholderType(ProperType):
 
 
 @overload
-def get_proper_type(typ: None) -> None:
-    ...
+def get_proper_type(typ: None) -> None: ...
 
 
 @overload
-def get_proper_type(typ: Type) -> ProperType:
-    ...
+def get_proper_type(typ: Type) -> ProperType: ...
 
 
 def get_proper_type(typ: Type | None) -> ProperType | None:
@@ -3088,8 +3102,7 @@ def get_proper_types(types: list[Type] | tuple[Type, ...]) -> list[ProperType]: 
 @overload
 def get_proper_types(
     types: list[Type | None] | tuple[Type | None, ...]
-) -> list[ProperType | None]:
-    ...
+) -> list[ProperType | None]: ...
 
 
 def get_proper_types(
@@ -3111,7 +3124,7 @@ def get_proper_types(
 # to make it easier to gradually get modules working with mypyc.
 # Import them here, after the types are defined.
 # This is intended as a re-export also.
-from mypy.type_visitor import (  # noqa: F811
+from mypy.type_visitor import (
     ALL_STRATEGY as ALL_STRATEGY,
     ANY_STRATEGY as ANY_STRATEGY,
     BoolTypeQuery as BoolTypeQuery,
@@ -3309,6 +3322,8 @@ class TypeStrVisitor(SyntheticTypeVisitor[str]):
         if not isinstance(get_proper_type(t.ret_type), NoneType):
             if t.type_guard is not None:
                 s += f" -> TypeGuard[{t.type_guard.accept(self)}]"
+            elif t.type_is is not None:
+                s += f" -> TypeIs[{t.type_is.accept(self)}]"
             else:
                 s += f" -> {t.ret_type.accept(self)}"
 
@@ -3390,7 +3405,11 @@ class TypeStrVisitor(SyntheticTypeVisitor[str]):
         return "..."
 
     def visit_type_type(self, t: TypeType) -> str:
-        return f"Type[{t.item.accept(self)}]"
+        if self.options.use_lowercase_names():
+            type_name = "type"
+        else:
+            type_name = "Type"
+        return f"{type_name}[{t.item.accept(self)}]"
 
     def visit_placeholder_type(self, t: PlaceholderType) -> str:
         return f"<placeholder {t.fullname}>"

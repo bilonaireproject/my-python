@@ -185,9 +185,11 @@ class Attribute:
             "init": self.init,
             "kw_only": self.kw_only,
             "has_converter": self.converter is not None,
-            "converter_init_type": self.converter.init_type.serialize()
-            if self.converter and self.converter.init_type
-            else None,
+            "converter_init_type": (
+                self.converter.init_type.serialize()
+                if self.converter and self.converter.init_type
+                else None
+            ),
             "context_line": self.context.line,
             "context_column": self.context.column,
             "init_type": self.init_type.serialize() if self.init_type else None,
@@ -323,9 +325,6 @@ def attr_class_maker_callback(
     frozen = _get_frozen(ctx, frozen_default)
     order = _determine_eq_order(ctx)
     slots = _get_decorator_bool_argument(ctx, "slots", slots_default)
-    hashable = _get_decorator_bool_argument(ctx, "hash", False) or _get_decorator_bool_argument(
-        ctx, "unsafe_hash", False
-    )
 
     auto_attribs = _get_decorator_optional_bool_argument(ctx, "auto_attribs", auto_attribs_default)
     kw_only = _get_decorator_bool_argument(ctx, "kw_only", False)
@@ -369,7 +368,24 @@ def attr_class_maker_callback(
         _add_order(ctx, adder)
     if frozen:
         _make_frozen(ctx, attributes)
-    elif not hashable:
+        # Frozen classes are hashable by default, even if inheriting from non-frozen ones.
+        hashable: bool | None = _get_decorator_bool_argument(
+            ctx, "hash", True
+        ) and _get_decorator_bool_argument(ctx, "unsafe_hash", True)
+    else:
+        hashable = _get_decorator_optional_bool_argument(ctx, "unsafe_hash")
+        if hashable is None:  # unspecified
+            hashable = _get_decorator_optional_bool_argument(ctx, "hash")
+
+    eq = _get_decorator_optional_bool_argument(ctx, "eq")
+    has_own_hash = "__hash__" in ctx.cls.info.names
+
+    if has_own_hash or (hashable is None and eq is False):
+        pass  # Do nothing.
+    elif hashable:
+        # We copy the `__hash__` signature from `object` to make them hashable.
+        ctx.cls.info.names["__hash__"] = ctx.cls.info.mro[-1].names["__hash__"]
+    else:
         _remove_hashability(ctx)
 
     return True
@@ -1073,9 +1089,11 @@ def _meet_fields(types: list[Mapping[str, Type]]) -> Mapping[str, Type]:
             field_to_types[name].append(typ)
 
     return {
-        name: get_proper_type(reduce(meet_types, f_types))
-        if len(f_types) == len(types)
-        else UninhabitedType()
+        name: (
+            get_proper_type(reduce(meet_types, f_types))
+            if len(f_types) == len(types)
+            else UninhabitedType()
+        )
         for name, f_types in field_to_types.items()
     }
 
