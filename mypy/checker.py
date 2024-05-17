@@ -478,6 +478,8 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
                             if not self.is_noop_for_reachability(d):
                                 self.msg.unreachable_statement(d)
                                 break
+                            else:
+                                self.accept(d)
                         else:
                             self.accept(d)
 
@@ -2803,6 +2805,8 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
                 if not self.is_noop_for_reachability(s):
                     self.msg.unreachable_statement(s)
                     break
+                else:
+                    self.accept(s)
             else:
                 self.accept(s)
 
