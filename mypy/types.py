@@ -1825,6 +1825,7 @@ class CallableType(FunctionLike):
         # (this is used for error messages)
         "imprecise_arg_kinds",
         "unpack_kwargs",  # Was an Unpack[...] with **kwargs used to define this callable?
+        "deprecated",  # The callable's deprecation message (in case it is deprecated)
     )
 
     def __init__(
@@ -1851,6 +1852,7 @@ class CallableType(FunctionLike):
         from_concatenate: bool = False,
         imprecise_arg_kinds: bool = False,
         unpack_kwargs: bool = False,
+        deprecated: str | None = None,
     ) -> None:
         super().__init__(line, column)
         assert len(arg_types) == len(arg_kinds) == len(arg_names)
@@ -1899,6 +1901,7 @@ class CallableType(FunctionLike):
         self.type_guard = type_guard
         self.type_is = type_is
         self.unpack_kwargs = unpack_kwargs
+        self.deprecated = deprecated
 
     def copy_modified(
         self: CT,
@@ -1923,6 +1926,7 @@ class CallableType(FunctionLike):
         from_concatenate: Bogus[bool] = _dummy,
         imprecise_arg_kinds: Bogus[bool] = _dummy,
         unpack_kwargs: Bogus[bool] = _dummy,
+        deprecated: Bogus[str | None] = _dummy,
     ) -> CT:
         modified = CallableType(
             arg_types=arg_types if arg_types is not _dummy else self.arg_types,
@@ -1954,6 +1958,7 @@ class CallableType(FunctionLike):
                 else self.imprecise_arg_kinds
             ),
             unpack_kwargs=unpack_kwargs if unpack_kwargs is not _dummy else self.unpack_kwargs,
+            deprecated=deprecated if deprecated is not _dummy else self.deprecated,
         )
         # Optimization: Only NewTypes are supported as subtypes since
         # the class is effectively final, so we can use a cast safely.
@@ -2233,6 +2238,7 @@ class CallableType(FunctionLike):
                 tuple(self.arg_names),
                 tuple(self.arg_kinds),
                 self.fallback,
+                self.deprecated,
             )
         )
 
@@ -2247,6 +2253,7 @@ class CallableType(FunctionLike):
                 and self.is_type_obj() == other.is_type_obj()
                 and self.is_ellipsis_args == other.is_ellipsis_args
                 and self.fallback == other.fallback
+                and self.deprecated == other.deprecated
             )
         else:
             return NotImplemented
@@ -2273,6 +2280,7 @@ class CallableType(FunctionLike):
             "from_concatenate": self.from_concatenate,
             "imprecise_arg_kinds": self.imprecise_arg_kinds,
             "unpack_kwargs": self.unpack_kwargs,
+            "deprecated": self.deprecated,
         }
 
     @classmethod
@@ -2298,6 +2306,7 @@ class CallableType(FunctionLike):
             from_concatenate=data["from_concatenate"],
             imprecise_arg_kinds=data["imprecise_arg_kinds"],
             unpack_kwargs=data["unpack_kwargs"],
+            deprecated=data["deprecated"],
         )
 
 
@@ -2316,7 +2325,7 @@ class Overloaded(FunctionLike):
     implementation.
     """
 
-    __slots__ = ("_items",)
+    __slots__ = ("_items", "deprecated")
 
     _items: list[CallableType]  # Must not be empty
 
@@ -2324,6 +2333,7 @@ class Overloaded(FunctionLike):
         super().__init__(items[0].line, items[0].column)
         self._items = items
         self.fallback = items[0].fallback
+        self.deprecated: str | None = None
 
     @property
     def items(self) -> list[CallableType]:
@@ -2368,12 +2378,18 @@ class Overloaded(FunctionLike):
         return self.items == other.items
 
     def serialize(self) -> JsonDict:
-        return {".class": "Overloaded", "items": [t.serialize() for t in self.items]}
+        return {
+            ".class": "Overloaded",
+            "items": [t.serialize() for t in self.items],
+            "deprecated": self.deprecated,
+        }
 
     @classmethod
     def deserialize(cls, data: JsonDict) -> Overloaded:
         assert data[".class"] == "Overloaded"
-        return Overloaded([CallableType.deserialize(t) for t in data["items"]])
+        s = Overloaded([CallableType.deserialize(t) for t in data["items"]])
+        s.deprecated = data.get("deprecated")
+        return s
 
 
 class TupleType(ProperType):
