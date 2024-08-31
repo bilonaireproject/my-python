@@ -1727,36 +1727,16 @@ class ExpressionChecker(ExpressionVisitor[Type]):
             callee = callee.copy_modified(ret_type=fresh_ret_type)
 
         if callee.is_generic():
-            need_refresh = any(
-                isinstance(v, (ParamSpecType, TypeVarTupleType)) for v in callee.variables
+            callee, formal_to_actual = self.adjust_generic_callable_params_mapping(
+                callee, args, arg_kinds, arg_names, formal_to_actual, context
             )
-            callee = freshen_function_type_vars(callee)
-            callee = self.infer_function_type_arguments_using_context(callee, context)
-            if need_refresh:
-                # Argument kinds etc. may have changed due to
-                # ParamSpec or TypeVarTuple variables being replaced with an arbitrary
-                # number of arguments; recalculate actual-to-formal map
-                formal_to_actual = map_actuals_to_formals(
-                    arg_kinds,
-                    arg_names,
-                    callee.arg_kinds,
-                    callee.arg_names,
-                    lambda i: self.accept(args[i]),
-                )
-            callee = self.infer_function_type_arguments(
-                callee, args, arg_kinds, arg_names, formal_to_actual, need_refresh, context
-            )
-            if need_refresh:
-                formal_to_actual = map_actuals_to_formals(
-                    arg_kinds,
-                    arg_names,
-                    callee.arg_kinds,
-                    callee.arg_names,
-                    lambda i: self.accept(args[i]),
-                )
 
         param_spec = callee.param_spec()
-        if param_spec is not None and arg_kinds == [ARG_STAR, ARG_STAR2]:
+        if (
+            param_spec is not None
+            and arg_kinds == [ARG_STAR, ARG_STAR2]
+            and len(formal_to_actual) == 2
+        ):
             arg1 = self.accept(args[0])
             arg2 = self.accept(args[1])
             if (
@@ -2362,6 +2342,9 @@ class ExpressionChecker(ExpressionVisitor[Type]):
                 # Positional argument when expecting a keyword argument.
                 self.msg.too_many_positional_arguments(callee, context)
                 ok = False
+            elif callee.param_spec() is not None and not formal_to_actual[i]:
+                self.msg.too_few_arguments(callee, context, actual_names)
+                ok = False
         return ok
 
     def check_for_extra_actual_arguments(
@@ -2754,6 +2737,44 @@ class ExpressionChecker(ExpressionVisitor[Type]):
             self.chk.fail(message_registry.TOO_MANY_UNION_COMBINATIONS, context)
         return result
 
+    def adjust_generic_callable_params_mapping(
+        self,
+        callee: CallableType,
+        args: list[Expression],
+        arg_kinds: list[ArgKind],
+        arg_names: Sequence[str | None] | None,
+        formal_to_actual: list[list[int]],
+        context: Context,
+    ) -> tuple[CallableType, list[list[int]]]:
+        need_refresh = any(
+            isinstance(v, (ParamSpecType, TypeVarTupleType)) for v in callee.variables
+        )
+        callee = freshen_function_type_vars(callee)
+        callee = self.infer_function_type_arguments_using_context(callee, context)
+        if need_refresh:
+            # Argument kinds etc. may have changed due to
+            # ParamSpec or TypeVarTuple variables being replaced with an arbitrary
+            # number of arguments; recalculate actual-to-formal map
+            formal_to_actual = map_actuals_to_formals(
+                arg_kinds,
+                arg_names,
+                callee.arg_kinds,
+                callee.arg_names,
+                lambda i: self.accept(args[i]),
+            )
+        callee = self.infer_function_type_arguments(
+            callee, args, arg_kinds, arg_names, formal_to_actual, need_refresh, context
+        )
+        if need_refresh:
+            formal_to_actual = map_actuals_to_formals(
+                arg_kinds,
+                arg_names,
+                callee.arg_kinds,
+                callee.arg_names,
+                lambda i: self.accept(args[i]),
+            )
+        return callee, formal_to_actual
+
     def plausible_overload_call_targets(
         self,
         arg_types: list[Type],
@@ -2763,9 +2784,9 @@ class ExpressionChecker(ExpressionVisitor[Type]):
     ) -> list[CallableType]:
         """Returns all overload call targets that having matching argument counts.
 
-        If the given args contains a star-arg (*arg or **kwarg argument), this method
-        will ensure all star-arg overloads appear at the start of the list, instead
-        of their usual location.
+        If the given args contains a star-arg (*arg or **kwarg argument, including
+        ParamSpec), this method will ensure all star-arg overloads appear at the start
+        of the list, instead of their usual location.
 
         The only exception is if the starred argument is something like a Tuple or a
         NamedTuple, which has a definitive "shape". If so, we don't move the corresponding
@@ -2793,9 +2814,13 @@ class ExpressionChecker(ExpressionVisitor[Type]):
             formal_to_actual = map_actuals_to_formals(
                 arg_kinds, arg_names, typ.arg_kinds, typ.arg_names, lambda i: arg_types[i]
             )
-
             with self.msg.filter_errors():
-                if self.check_argument_count(
+                if typ.param_spec() is not None:
+                    # ParamSpec can be expanded in a lot of different ways. We may try
+                    # to expand it here instead, but picking an impossible overload
+                    # is safe: it will be filtered out later.
+                    star_matches.append(typ)
+                elif self.check_argument_count(
                     typ, arg_types, arg_kinds, arg_names, formal_to_actual, None
                 ):
                     if args_have_var_arg and typ.is_var_arg:
